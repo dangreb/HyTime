@@ -1,0 +1,7 @@
+Metadata-Version: 2.1
+Name: HyTime
+Version: 0.1
+Summary: Hydea Neural Networks - Time Utilities
+Home-page: http://github.com/dasgreb
+Author: dasgreb
+Requires-Python: >=3.10.13
