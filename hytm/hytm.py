@@ -19,7 +19,7 @@ class HyTmly:
     dstr_frmt: ClassVar[str] = "%Y%m%d%H%M%S"
     dstr_regx: ClassVar[TimeRE] = TimeRE().compile(format=dstr_frmt)
 
-    mydb_frmt: ClassVar[str] = "%Y-%m-%d %H:%M:%S"
+    veue_frmt: ClassVar[str] = "%Y-%m-%d %H:%M"
 
     freq_doma: ClassVar[dict] = {freq: dict(parm=parm, fkey=fkey) for freq, parm, fkey in zip(
         ["year", "month", "week", "day", "hour", "minute", "second"],
@@ -132,7 +132,7 @@ class HySpan:
         """
 
     def __str__(self):
-        return "_".join([date.strftime("%Y-%m-%d %H:%M:%S") for date in [self.bdat, self.edat]])
+        return "|".join([date.strftime("%Y-%m-%d %H:%M") for date in [self.bdat, self.edat]])
 
     def __sub__(self, tcks: int):
         if tcks:
@@ -157,11 +157,10 @@ class HySpan:
         return outs[HyTmly.dlts(self.bdat - init.bdat) // len(self.dlta):(-(HyTmly.dlts(bdat - self.edat) // len(self.dlta)) + 1) or None]
 
     def make_dict(self) -> dict:
-        return dict(bdat=self.bdat.strftime(HyTmly.dstr_frmt), edat=self.edat.strftime(HyTmly.dstr_frmt), grnl=self.dlta.make_dict())
+        return dict(bdat=self.bdat.strftime(HyTmly.veue_frmt), edat=self.edat.strftime(HyTmly.veue_frmt), grnl=self.dlta.make_dict())
 
 if __name__ == "__main__":
     def test():
-
         import random
         import matplotlib.pyplot as plot
         import matplotlib.colors as pcol
@@ -178,10 +177,7 @@ if __name__ == "__main__":
         span = HySpan(bdat=HyTmly.pars("2017-02-14"), edat=HyTmly.pars("2024-01-16"), dlta=HyDelta(intv=1, freq=HyTmly.day))
         cycl = span.cycle(cycl=HyDelta(intv=1, freq=HyTmly.month), step=HyDelta(intv=1, freq=HyTmly.day), sin_cos=True)
         fast_plot(cycl)
-        breakpoint()
         cycl = span.cycle(cycl=HyDelta(intv=1, freq=HyTmly.year), step=HyDelta(intv=1, freq=HyTmly.day))
         fast_plot(cycl)
-
-        breakpoint()
     test()
     pass
