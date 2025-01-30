@@ -16,8 +16,8 @@ from dataclasses import dataclass, field
 
 class HyTmly:
 
-    dstr_frmt: ClassVar[str] = "%Y%m%d%H%M%S"
-    dstr_regx: ClassVar[TimeRE] = TimeRE().compile(format=dstr_frmt)
+    defa_frmt: ClassVar[str] = "%Y%m%d%H%M%S"
+    defa_regx: ClassVar[TimeRE] = TimeRE().compile(format=defa_frmt)
 
     veue_frmt: ClassVar[str] = "%Y-%m-%d %H:%M"
 
@@ -36,7 +36,7 @@ class HyTmly:
 
     dnow: ClassVar[Callable[[], datetime]] = lambda: datetime.now(tz=timezone.utc)
 
-    dstr: ClassVar[Callable[[datetime], str]] = lambda dtim: dtim and dtim.strftime(HyTmly.dstr_frmt) or str()
+    dstr: ClassVar[Callable[[datetime], str]] = lambda dtim: dtim and dtim.strftime(HyTmly.defa_frmt) or str()
     sfnd: ClassVar[Callable] = lambda strn, subs: strn if 0 >= strn.find(subs) else strn[:strn.find(subs)]
     sdat: ClassVar[Callable[[datetime], datetime]] = lambda date: next((datetime.fromisoformat(f'{HyTmly.sfnd(isod, "+")}+00:00') for isod in [date.isoformat()]))
 
@@ -73,7 +73,7 @@ class HyDelta:
         return f'{self.intv}{HyTmly.freq_doma[self.freq]["fkey"]}'
 
     def __call__(self, tcks: int = 1) -> timedelta:
-        return self.dlta * max(tcks,1)
+        return self.dlta * tcks
 
     def pars_intv(self):
         return f'{self.intv}{HyTmly.freq_doma[self.freq]["fkey"]}'
@@ -89,13 +89,30 @@ class HySpan:
     ctof: Optional[datetime] = field(default=None)
 
     dlta: HyDelta = field(default_factory=HyDelta)
+    snip: bool = field(default=False)
 
     cdlt: HyDelta = field(default=None, init=False)
     sdlt: HyDelta = field(default=None, init=False)
 
+    ssep: ClassVar[str] = field(default=" | ", init=False)
+
     def __post_init__(self):
         (self.bdat, self.edat, self.ctof) = [date if not date else HyTmly.pars(date) if isinstance(date, str) else HyTmly.sdat(date) for date in [self.bdat, self.edat, self.ctof]]
         self.ctof = self.edat if not self.ctof or ( self.edat <= self.ctof or self.bdat >= self.ctof) else self.ctof
+
+    def __snap(self, bdat: str | datetime = None, edat: str | datetime = None, ctof: str | datetime = None ):
+        self.bdat = HyTmly.pars(bdat) if isinstance(bdat, str) else HyTmly.sdat(bdat) if bdat else self.bdat
+        self.ctof = HyTmly.pars(ctof) if isinstance(ctof, str) else HyTmly.sdat(ctof) if bdat else self.ctof
+        self.edat = HyTmly.pars(edat) if isinstance(edat, str) else HyTmly.sdat(edat) if edat else self.edat
+        bdat, ctof, edat = self.bdat.replace(second=0, microsecond=0), self.ctof.replace(second=0, microsecond=0), self.edat.replace(second=0, microsecond=0)
+        (self.bdat, self.ctof, self.edat) = [HyTmly.sdat(datetime(year=bdat.year, month=1, day=1)), HyTmly.sdat(datetime(year=ctof.year, month=1, day=1)), HyTmly.sdat(datetime(year=edat.year + 1, month=1, day=1))]
+        self.bdat -= (self.dlta() * int(HyTmly.dlts(self.bdat - bdat) // len(self.dlta)))
+        self.ctof -= (self.dlta() * int(HyTmly.dlts(self.ctof - ctof) // len(self.dlta)))
+        self.edat -= (self.dlta() * int(HyTmly.dlts(self.edat - edat) // len(self.dlta)))
+        if self.edat > HyTmly.dnow():
+            self.edat -= self.dlta()
+            self.bdat -= self.dlta()
+        return self
 
     def snap(self, bdat: str | datetime = None, edat: str | datetime = None, ctof: str | datetime = None ):
         self.bdat = HyTmly.pars(bdat) if isinstance(bdat, str) else HyTmly.sdat(bdat) if bdat else self.bdat
@@ -103,12 +120,18 @@ class HySpan:
         self.edat = HyTmly.pars(edat) if isinstance(edat, str) else HyTmly.sdat(edat) if edat else self.edat
         bdat, ctof, edat = self.bdat.replace(second=0, microsecond=0), self.ctof.replace(second=0, microsecond=0), self.edat.replace(second=0, microsecond=0)
         (self.bdat, self.ctof, self.edat) = [HyTmly.sdat(datetime(year=bdat.year, month=1, day=1)), HyTmly.sdat(datetime(year=ctof.year, month=1, day=1)), HyTmly.sdat(datetime(year=edat.year + 1, month=1, day=1))]
-        self.bdat -= (self.dlta() * int(math.floor(HyTmly.dlts(self.bdat - bdat) / len(self.dlta))))
-        self.ctof -= (self.dlta() * int(math.floor(HyTmly.dlts(self.ctof - ctof) / len(self.dlta))))
-        self.edat -= (self.dlta() * int(math.floor(HyTmly.dlts(self.edat - edat) / len(self.dlta))))
+        self.bdat -= (self.dlta() * int(HyTmly.dlts(self.bdat - bdat) // len(self.dlta)))
+        self.ctof -= (self.dlta() * int(HyTmly.dlts(self.ctof - ctof) // len(self.dlta)))
+        self.edat -= (self.dlta() * int(HyTmly.dlts(self.edat - edat) // len(self.dlta)))
         if self.edat > HyTmly.dnow():
             self.edat -= self.dlta()
             self.bdat -= self.dlta()
+        return self
+
+    def slide(self, stride: int | datetime = None):
+        if self.snip and stride and isinstance(stride, int|datetime):
+            dlta = self.dlta(stride) if isinstance(stride, int) else (stride.replace(second=0, microsecond=0) - self.edat) + self.dlta()
+            self.bdat, self.ctof, self.edat = [dtim + dlta for dtim in (self.bdat, self.ctof, self.edat)]
         return self
 
     def split(self, ctof: datetime = None):
@@ -132,11 +155,28 @@ class HySpan:
         """
 
     def __str__(self):
-        return "|".join([date.strftime("%Y-%m-%d %H:%M") for date in [self.bdat, self.edat]])
+        return HySpan.ssep.join([date.strftime("%Y-%m-%d %H:%M") for date in [self.bdat, self.edat]])
+
+    def __gt__(self, other: Self)  -> bool:
+        return self.bdat > other.bdat
+
+    def __ge__(self, other: Self)  -> bool:
+        return self.bdat >= other.bdat
+
+    def __lt__(self, other: Self)  -> bool:
+        return self.bdat < other.bdat
+
+    def __le__(self, other: Self)  -> bool:
+        return self.bdat <= other.bdat
 
     def __sub__(self, tcks: int):
         if tcks:
-            self.bdat = (self.edat - (self.dlta() * int(tcks - 1)))
+            self.bdat = (self.edat - (self.dlta(tcks)))
+        return self
+
+    def __add__(self, tcks: int):
+        if tcks:
+            self.edat = (self.edat + (self.dlta(tcks)))
         return self
 
     def cycle(self, cycl: HyDelta = HyDelta(intv=1, freq=HyTmly.day), step: HyDelta = HyDelta(intv=1, freq=HyTmly.hour), sin_cos: bool = False):
@@ -156,10 +196,21 @@ class HySpan:
             outs = nmpy.concatenate([outs, arng] if not sin_cos else [outs, nmpy.concatenate(list(nmpy.around(fn(2 * nmpy.pi * arng / alen), 8) for fn in [nmpy.sin, nmpy.cos]), axis=-1)])
         return outs[HyTmly.dlts(self.bdat - init.bdat) // len(self.dlta):(-(HyTmly.dlts(bdat - self.edat) // len(self.dlta)) + 1) or None]
 
-    def make_dict(self) -> dict:
-        return dict(bdat=self.bdat.strftime(HyTmly.veue_frmt), edat=self.edat.strftime(HyTmly.veue_frmt), grnl=self.dlta.make_dict())
+    def make_dict(self, frmt=HyTmly.defa_frmt) -> dict:
+        return dict(bdat=self.bdat.strftime(frmt), edat=self.edat.strftime(frmt), grnl=self.dlta.make_dict())
 
 if __name__ == "__main__":
+    import random
+    breakpoint()
+
+    veri = [(HySpan()-random.randint(1000,2000)).snap() for _ in range(1024)]
+
+    breakpoint()
+    span = (HySpan().snap() - 10080).snap()
+    span.slide(stride=-1274)
+    span.slide(stride=HyTmly.dnow() + span.dlta(12960))
+    breakpoint()
+
     def test():
         import random
         import matplotlib.pyplot as plot
