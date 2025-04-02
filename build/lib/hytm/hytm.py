@@ -75,8 +75,11 @@ class HyDelta:
     def __call__(self, tcks: int = 1) -> timedelta:
         return self.dlta * tcks
 
+    def timedelta(self):
+        return timedelta(seconds=len(self))
+
     def pars_intv(self):
-        return f'{self.intv}{HyTmly.freq_doma[self.freq]["fkey"]}'
+        return HyDelta(*sum([[int("".join(filter(str.isdigit,"1m")))],[[fnam for fnam,fval in HyTmly.freq_doma.items() if fval["fkey"] == fkey] for fkey in ["".join(filter(str.isalpha,"1m"))]].pop()],[]))
 
     def cont_tcks(self, dlta = timedelta):
         return int(math.floor(HyTmly.dlts(dlta) / len(self)))
@@ -85,7 +88,7 @@ class HyDelta:
 @dataclass
 class HySpan:
     bdat: str | datetime = HyTmly.dmin
-    edat: str | datetime = HyTmly.dnow()
+    edat: str | datetime = field(default_factory=HyTmly.dnow)
     ctof: Optional[datetime] = field(default=None)
 
     dlta: HyDelta = field(default_factory=HyDelta)
@@ -126,11 +129,12 @@ class HySpan:
         if self.edat > HyTmly.dnow():
             self.edat -= self.dlta()
             self.bdat -= self.dlta()
+        self.snip = True
         return self
 
     def slide(self, stride: int | datetime = None):
-        if self.snip and stride and isinstance(stride, int|datetime):
-            dlta = self.dlta(stride) if isinstance(stride, int) else (stride.replace(second=0, microsecond=0) - self.edat) + self.dlta()
+        if stride and isinstance(stride, int|datetime):
+            dlta = self.dlta(stride) if isinstance(stride, int) else ((stride if not self.snip else stride.replace(second=0, microsecond=0)) - self.edat) + self.dlta()
             self.bdat, self.ctof, self.edat = [dtim + dlta for dtim in (self.bdat, self.ctof, self.edat)]
         return self
 
@@ -158,10 +162,10 @@ class HySpan:
         return HySpan.ssep.join([date.strftime("%Y-%m-%d %H:%M") for date in [self.bdat, self.edat]])
 
     def __gt__(self, other: Self)  -> bool:
-        return self.bdat > other.bdat
+        return self.edat > other.edat
 
     def __ge__(self, other: Self)  -> bool:
-        return self.bdat >= other.bdat
+        return self.edat >= other.edat
 
     def __lt__(self, other: Self)  -> bool:
         return self.bdat < other.bdat
@@ -170,8 +174,7 @@ class HySpan:
         return self.bdat <= other.bdat
 
     def __sub__(self, tcks: int):
-        if tcks:
-            self.bdat = (self.edat - (self.dlta(tcks)))
+        self.bdat = (self.edat - (self.dlta(tcks))) if tcks else self.edat
         return self
 
     def __add__(self, tcks: int):
@@ -202,6 +205,21 @@ class HySpan:
 if __name__ == "__main__":
     import random
     breakpoint()
+
+    past = (HySpan() - 1440).slide(-32)
+    neue = (HySpan() - 1440)
+
+    breakpoint()
+
+    dmmy = past  > neue
+    dmmy = past >= neue
+    dmmy = past  < neue
+    dmmy = past <= neue
+
+    dmmy = neue  > past
+    dmmy = neue >= past
+    dmmy = neue  < past
+    dmmy = neue <= past
 
     veri = [(HySpan()-random.randint(1000,2000)).snap() for _ in range(1024)]
 
